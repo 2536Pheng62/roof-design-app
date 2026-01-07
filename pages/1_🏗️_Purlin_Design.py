@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 from data_utils import load_data, DEFAULT_FILENAME, SteelMaterial
 from purlin_design import PurlinDesign
 
@@ -165,31 +166,47 @@ with tab3:
 
     if st.button("📄 Generate Report"):
         from report_generator import ReportGenerator
-        import os
         
         # Prepare Data
         proj_info = {"Project Name": proj_name, "Owner": owner, "Engineer": engineer}
         
-        with st.spinner("Generating PDF..."):
-            gen = ReportGenerator(proj_info, inputs, results, section_data)
-            success, result_path = gen.generate(f"Report_{proj_name}.pdf")
-            
-            if success:
-                st.success(f"Report generated successfully!")
+        try:
+            with st.spinner("Generating PDF..."):
+                gen = ReportGenerator(proj_info, inputs, results, section_data)
+                success, result_path = gen.generate(f"Report_{proj_name}.pdf")
                 
-                # Verify file exists and load into session state
-                if os.path.exists(result_path):
-                    with open(result_path, "rb") as f:
-                        st.session_state.pdf_data = f.read()
-                    st.session_state.pdf_name = result_path
-            else:
-                st.error(f"Failed to generate report: {result_path}")
+                if success:
+                    st.success(f"✅ Report generated successfully!")
+                    
+                    # Verify file exists and load into session state
+                    if os.path.exists(result_path):
+                        with open(result_path, "rb") as f:
+                            st.session_state.pdf_data = f.read()
+                        st.session_state.pdf_name = result_path
+                        st.info(f"📄 File: {os.path.basename(result_path)} ({len(st.session_state.pdf_data)/1024:.1f} KB)")
+                    else:
+                        st.error(f"❌ File was not created at: {result_path}")
+                        st.session_state.pdf_data = None
+                else:
+                    st.error(f"❌ Failed to generate report: {result_path}")
+                    st.session_state.pdf_data = None
+                    
+        except Exception as e:
+            st.error(f"❌ Exception during PDF generation: {str(e)}")
+            st.session_state.pdf_data = None
+            import traceback
+            st.code(traceback.format_exc())
 
     # Display Download Button if data is available
     if st.session_state.pdf_data is not None:
+        file_name = os.path.basename(st.session_state.pdf_name) if st.session_state.pdf_name else "report.pdf"
+        # Sanitize filename (remove spaces just in case)
+        safe_file_name = file_name.replace(" ", "_")
+        
         st.download_button(
-            label="📥 Download PDF Report",
+            label=f"📥 Download PDF Report ({len(st.session_state.pdf_data)/1024:.1f} KB)",
             data=st.session_state.pdf_data,
-            file_name=st.session_state.pdf_name,
-            mime="application/pdf"
+            file_name=safe_file_name,
+            mime="application/pdf",
+            key=f"download_pdf_{safe_file_name}"
         )
