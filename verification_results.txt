@@ -1,0 +1,11 @@
+--- Starting Verification ---
+PASS: Data loaded. 59 sections found.
+Selected Section: C-100x50x20x3.2
+Section Data: {'Section': 'C-100x50x20x3.2', 'Weight': 5.5, 'Ix': 107.0, 'Zx': 3.9, 'Area': 7.007, 'h': 100, 't': 3.2}
+
+--- Results ---
+Loads (kg/m): {'SelfWeight': 5.5, 'DL_line': 15.5, 'LL_line': 30.0, 'WL_perp': 49.80973490458728}
+Combinations (kg/m): {'Wu1': 72.7, 'Wu2': 134.22057584733966, 'Wu_design': 134.22057584733966}
+Internal Forces: {'Mu_kgm': 268.4411516946793, 'Vu_kg': 268.4411516946793}
+Checks: {'Moment': False, 'Shear': True, 'Deflection': True}
+Ratios: {'Moment': 3.1866233581989474, 'Shear': 0.058255458267074504, 'Deflection': 0.6378504672897196, 'h/t': 31.25}
