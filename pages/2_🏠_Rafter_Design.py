@@ -1,329 +1,389 @@
 import streamlit as st
 import pandas as pd
 from rafter_design import RafterDesign
-from data_utils import load_data
 from theme_manager import use_theme
 
 st.set_page_config(page_title="ออกแบบจันทัน", layout="wide")
 use_theme()
 
-st.title("🏠 โมดูลออกแบบจันทันเหล็กรีดร้อน")
+st.title("🏠 โมดูลออกแบบจันทันเหล็ก")
+st.markdown("**อ้างอิง:** AISC 360-16 · วิธี LRFD · รองรับ มอก. 1227 (รีดร้อน) และ มอก. 1228 (ขึ้นรูปเย็น)")
 st.markdown("---")
 
-# --- 1. Load Data ---
-DATA_FILE_CF = "Roof-by-Sarayut-LRFD-V.1.0.3.xlsx - Data Steel.csv" # Cold Formed
-DATA_FILE_HR = "tis_1227_steel.csv" # Hot Rolled
+# ─────────────────────────────────────────────────────────────
+# โหลดข้อมูลหน้าตัด
+# ─────────────────────────────────────────────────────────────
+DATA_HR = "tis_1227_steel.csv"
+DATA_CF = "Roof-by-Sarayut-LRFD-V.1.0.3.xlsx - Data Steel.csv"
+
 
 @st.cache_data
-def get_data_cf():
-    return load_data(DATA_FILE_CF)
-
-@st.cache_data
-def get_data_hr():
-    # Load hot rolled directly since it's cleaner
-    if pd.io.common.file_exists(DATA_FILE_HR):
-        return pd.read_csv(DATA_FILE_HR)
+def _load_hr():
+    if pd.io.common.file_exists(DATA_HR):
+        df = pd.read_csv(DATA_HR)
+        # fallback: ถ้าไม่มีคอลัมน์ Type ให้เพิ่มเป็น HN ทั้งหมด
+        if "Type" not in df.columns:
+            df["Type"] = "HN"
+        return df
     return pd.DataFrame()
 
-df_cf = get_data_cf()
-df_hr = get_data_hr()
+
+@st.cache_data
+def _load_cf():
+    from data_utils import load_data
+    df = load_data(DATA_CF)
+    # ถ้า load_data ไม่ได้ข้อมูล ให้ลอง tis_1228 โดยตรง
+    if df.empty and pd.io.common.file_exists("tis_1228_steel.csv"):
+        df = pd.read_csv("tis_1228_steel.csv")
+    return df
 
 
-# --- 2. Sidebar Inputs ---
+df_hr = _load_hr()
+df_cf = _load_cf()
+
+# ─────────────────────────────────────────────────────────────
+# SIDEBAR — Inputs
+# ─────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("1. มิติทางเรขาคณิต")
-    span = st.number_input("ช่วงพาดตามความลาด (เมตร)", value=6.0, step=0.1, format="%.2f", key="rafter_span")
-    spacing = st.number_input("ระยะห่างจันทัน (เมตร)", value=1.5, step=0.1, format="%.2f", key="rafter_spacing")
-    slope = st.number_input("ความชันหลังคา (องศา)", value=10.0, step=0.1, format="%.1f", key="rafter_slope")
-    lb = st.number_input("ความยาวไม่ค้ำยัน Lb (เมตร)", value=1.5, step=0.1, format="%.2f", key="rafter_lb")
+    st.header("📐 1. มิติเรขาคณิต")
+    span    = st.number_input("ช่วงพาด L (เมตร)",           value=6.0,  step=0.5,  format="%.2f", key="rf_span")
+    spacing = st.number_input("ระยะห่างจันทัน s (เมตร)",    value=1.5,  step=0.1,  format="%.2f", key="rf_spacing")
+    slope   = st.number_input("ความชันหลังคา (องศา)",       value=10.0, step=0.5,  format="%.1f", key="rf_slope")
+    lb      = st.number_input("ความยาวไม่ค้ำยัน Lb (เมตร)", value=1.5,  step=0.1,  format="%.2f", key="rf_lb")
 
-    st.header("2. น้ำหนักบรรทุก")
-    dl = st.number_input("น้ำหนักบรรทุกคงที่ DL (กก./ตร.ม.)", value=20.0, step=1.0, key="rafter_dl")
-    ll = st.number_input("น้ำหนักใช้งาน LL (กก./ตร.ม.)", value=30.0, step=1.0, key="rafter_ll")
-    wl = st.number_input("แรงลม WL (กก./ตร.ม.)", value=50.0, step=1.0, key="rafter_wl")
+    st.header("⚖️ 2. น้ำหนักบรรทุก")
+    dl = st.number_input("น้ำหนักคงที่ DL (กก./ตร.ม.)",  value=20.0, step=5.0, key="rf_dl")
+    ll = st.number_input("น้ำหนักใช้งาน LL (กก./ตร.ม.)", value=30.0, step=5.0, key="rf_ll")
+    wl = st.number_input("แรงลม WL (กก./ตร.ม.)",         value=50.0, step=5.0, key="rf_wl")
 
-    st.header("3. คุณสมบัติวัสดุ")
-    fy = st.number_input("กำลังคราก Fy (กก./ตร.ซม.)", value=2400.0, step=100.0, key="rafter_fy")
-    E = st.number_input("มอดูลัสยืดหยุ่น E (กก./ตร.ซม.)", value=2.04e6, format="%.2e", key="rafter_E")
+    st.header("🔩 3. เลือกหน้าตัด")
 
-    st.header("4. เลือกหน้าตัด")
-    # Section Type Toggle - Lip-C Default for Rafter per user request
-    steel_type = st.radio("ชนิดเหล็ก", ["Hot-Rolled (H-Beam/I-Beam มอก. 1227)", "Cold-Formed (Lip-C มอก. 1228)"], index=1)
-    
-    if steel_type == "Hot-Rolled (H-Beam/I-Beam มอก. 1227)":
-        df = df_hr
-        if df.empty: st.error("ไม่พบข้อมูลเหล็กรีดร้อน"); st.stop()
+    # ── ก. มาตรฐานวัสดุ ──────────────────────────────────────
+    std_choice = st.radio(
+        "มาตรฐานวัสดุ",
+        ["🏗 มอก. 1227 — เหล็กรีดร้อน (H-Beam / I-Beam)", "📦 มอก. 1228 — เหล็กขึ้นรูปเย็น (Lip-C)"],
+        key="rf_std",
+    )
+    is_hr = std_choice.startswith("🏗")
+
+    if is_hr:
+        # ── ข. ชนิดหน้าตัด H-Beam ─────────────────────────────
+        if df_hr.empty:
+            st.error("ไม่พบ tis_1227_steel.csv")
+            st.stop()
+
+        type_labels = {
+            "HN": "HN — ปีกแคบ (คาน / จันทัน)",
+            "HM": "HM — ปีกกลาง (คาน-เสา)",
+            "HW": "HW — ปีกกว้าง (เสา)",
+            "I":  "I  — I-Beam ปีกลิ่ม",
+        }
+        available_types = [t for t in ["HN", "HM", "HW", "I"] if t in df_hr["Type"].values]
+        type_sel = st.selectbox(
+            "ชนิดหน้าตัด",
+            available_types,
+            format_func=lambda t: type_labels.get(t, t),
+            key="rf_type",
+        )
+
+        df_filtered = df_hr[df_hr["Type"] == type_sel].copy()
+
+        # ── ค. กรองตามความลึก ─────────────────────────────────
+        h_vals = sorted(df_filtered["h"].unique())
+        h_min, h_max = int(min(h_vals)), int(max(h_vals))
+        depth_range = st.select_slider(
+            "กรองตามความลึก h (mm)",
+            options=sorted(df_filtered["h"].unique().tolist()),
+            value=(h_min, h_max),
+            key="rf_depth",
+        )
+        df_show = df_filtered[
+            (df_filtered["h"] >= depth_range[0]) & (df_filtered["h"] <= depth_range[1])
+        ]
+
+        if df_show.empty:
+            st.warning("ไม่พบหน้าตัดในช่วงที่เลือก")
+            st.stop()
+
+        section_name = st.selectbox(
+            "เลือกหน้าตัด",
+            df_show["Section"].astype(str).unique(),
+            key="rf_sec_hr",
+        )
+        row = df_hr[df_hr["Section"] == section_name].iloc[0]
+
+        # ── ง. คุณสมบัติวัสดุ SS400 / SM490 ──────────────────
+        grade_map = {
+            "SS400  (Fy=2,500 / Fu=4,080 ksc)": (2500.0, 4080.0),
+            "SM490  (Fy=3,313 / Fu=4,894 ksc)": (3313.0, 4894.0),
+            "SM570  (Fy=4,587 / Fu=5,709 ksc)": (4587.0, 5709.0),
+            "กำหนดเอง": (0.0, 0.0),
+        }
+        grade_sel = st.selectbox("เกรดเหล็ก มอก. 1227", list(grade_map.keys()), key="rf_grade")
+        fy_def, _ = grade_map[grade_sel]
+        if grade_sel == "กำหนดเอง":
+            fy = st.number_input("Fy (ksc)", value=2500.0, step=50.0, key="rf_fy_c")
+        else:
+            fy = fy_def
+            st.info(f"Fy = {fy:,.0f} ksc")
+        E = st.number_input("E (ksc)", value=2.04e6, format="%.3e", key="rf_E_hr")
+
     else:
-        df = df_cf
-        if df.empty: st.error("ไม่พบข้อมูลเหล็กขึ้นรูปเย็น"); st.stop()
-        
-    section_name = st.selectbox("เลือกหน้าตัด", df['Section'].astype(str).unique(), key="rafter_section")
-    
-    # Live Calculation Toggle
+        # ── ข. C-Channel มอก. 1228 ───────────────────────────
+        if df_cf.empty:
+            st.error("ไม่พบข้อมูล มอก. 1228")
+            st.stop()
+
+        # กรองตามความลึก
+        h_col = "h" if "h" in df_cf.columns else df_cf.columns[0]
+        h_vals_cf = sorted(df_cf[h_col].unique().tolist()) if h_col in df_cf.columns else []
+        if h_vals_cf:
+            depth_range_cf = st.select_slider(
+                "กรองตามความลึก h (mm)",
+                options=h_vals_cf,
+                value=(min(h_vals_cf), max(h_vals_cf)),
+                key="rf_depth_cf",
+            )
+            df_show_cf = df_cf[
+                (df_cf[h_col] >= depth_range_cf[0]) & (df_cf[h_col] <= depth_range_cf[1])
+            ]
+        else:
+            df_show_cf = df_cf
+
+        section_name = st.selectbox(
+            "เลือกหน้าตัด C-Channel",
+            df_show_cf["Section"].astype(str).unique(),
+            key="rf_sec_cf",
+        )
+        row = df_cf[df_cf["Section"] == section_name].iloc[0]
+
+        # วัสดุ SSC400 มอก. 1228
+        st.markdown("**เกรดเหล็ก:** SSC400 (มอก. 1228-2549)")
+        fy = st.number_input("Fy (ksc)", value=2450.0, step=50.0, key="rf_fy_cf")
+        E  = st.number_input("E  (ksc)", value=2.04e6, format="%.3e", key="rf_E_cf")
+
     st.divider()
-    live_calc_rafter = st.checkbox("🔴 Live Calculation (คำนวณอัตโนมัติ)", value=True, key="live_calc_rafter")
-    if live_calc_rafter:
-        st.caption("⚡ กราฟจะอัปเดตทันทีเมื่อแก้ไขค่า")
+    live_calc = st.checkbox("🔴 Live Calculation", value=True, key="rf_live")
 
-# --- 3. Main Content: Section Details & Run ---
-st.subheader("คุณสมบัติหน้าตัด")
+# ─────────────────────────────────────────────────────────────
+# MAIN AREA — Section Properties & Results
+# ─────────────────────────────────────────────────────────────
 
-# Get selected row
-row = df[df['Section'] == section_name].iloc[0]
+# ── แสดงคุณสมบัติหน้าตัดอัตโนมัติ ────────────────────────────
+st.subheader("📋 คุณสมบัติหน้าตัด")
 
-if steel_type == "Hot-Rolled (H-Beam/I-Beam มอก. 1227)":
-    # Mapped directly from headers generated in generate_tis_hotrolled.py
-    # h, b, tw, tf, Area, Ix, Iy, Sx, Zx, ry, Weight
-    
-    # Defaults in CM
-    def get_val(key, default=0.0): return float(row.get(key, default))
-    
-    default_d = get_val('h') / 10.0
-    default_bf = get_val('b') / 10.0
-    default_tf = get_val('tf') / 10.0 # mm -> cm
-    default_tw = get_val('tw') / 10.0 # mm -> cm
-    default_A = get_val('Area')
-    default_Ix = get_val('Ix')
-    default_Zx = get_val('Zx') # Plastic Zx
-    default_Sx = get_val('Sx') # Elastic Sx
-    default_ry = get_val('ry')
-    
+def _fv(key, default=0.0):
+    v = row.get(key, default)
+    return float(v) if v is not None and str(v) != "nan" else default
+
+if is_hr:
+    # แปลง mm → cm
+    d_cm   = _fv("h")  / 10.0
+    bf_cm  = _fv("b")  / 10.0
+    tf_cm  = _fv("tf") / 10.0
+    tw_cm  = _fv("tw") / 10.0
+    area   = _fv("Area")
+    Ix_v   = _fv("Ix")
+    Sx_v   = _fv("Sx")
+    Zx_v   = _fv("Zx")
+    ry_v   = _fv("ry")
+    rts_v  = _fv("rts")
+    J_v    = _fv("J")
+    h0_v   = _fv("h0")
+    wt_v   = _fv("Weight")
+    rx_v   = _fv("rx")
+
+    prop_cols = st.columns(4)
+    prop_cols[0].metric("น้ำหนัก", f"{wt_v:.2f} kg/m")
+    prop_cols[1].metric("Area",    f"{area:.3f} cm²")
+    prop_cols[2].metric("Ix",      f"{Ix_v:.1f} cm⁴")
+    prop_cols[3].metric("Zx (Plastic)", f"{Zx_v:.2f} cm³")
+    prop_cols2 = st.columns(4)
+    prop_cols2[0].metric("rx",  f"{rx_v:.3f} cm")
+    prop_cols2[1].metric("ry",  f"{ry_v:.3f} cm")
+    prop_cols2[2].metric("rts", f"{rts_v:.3f} cm")
+    prop_cols2[3].metric("J",   f"{J_v:.4f} cm⁴")
+
+    with st.expander("ดูคุณสมบัติครบทุกคอลัมน์", expanded=False):
+        st.dataframe(
+            pd.DataFrame([row]).T.rename(columns={0: "ค่า"}),
+            use_container_width=True,
+        )
+
 else:
-    # Cold Formed (Lip-C) logic
-    # Extract basic props from CSV (mapped by data_utils)
-    # Note: data_utils maps 'h', 't', 'Area', 'Ix', 'Zx', 'Weight'
-    # We need to map these to RafterDesign expectations: Zx, Ix, Sx, Area, d, bf, tf, tw, ry
-    csv_d = row.get('h', 0) / 10.0 # mm to cm
+    d_cm  = _fv("h")  / 10.0
+    bf_cm = _fv("b")  / 10.0
+    tf_cm = _fv("t")  / 10.0
+    tw_cm = _fv("t")  / 10.0
+    area  = _fv("Area")
+    Ix_v  = _fv("Ix")
+    Sx_v  = _fv("Sx") if "Sx" in row.index else _fv("Zx")
+    Zx_v  = _fv("Zx")
+    ry_v  = d_cm * 0.28   # approximate for C-channel
+    rts_v = 0.0
+    J_v   = 0.0
+    h0_v  = 0.0
+    wt_v  = _fv("Weight")
 
-    # Helper to safely get mm and convert to cm
-    def get_cm(key, default_val=0.0):
-        val = row.get(key)
-        if pd.isna(val): return default_val
-        return float(val) / 10.0
+    prop_cols = st.columns(4)
+    prop_cols[0].metric("น้ำหนัก", f"{wt_v:.2f} kg/m")
+    prop_cols[1].metric("Area",   f"{area:.3f} cm²")
+    prop_cols[2].metric("Ix",     f"{Ix_v:.1f} cm⁴")
+    prop_cols[3].metric("Zx/Sx",  f"{Zx_v:.2f} cm³")
 
-    default_d = get_cm('h', 10.0)
-    # C-Channel 'b' column (from generate_tis_steel.py) or default
-    if 'b' in row:
-        default_bf = get_cm('b')
-    else:
-        # Fallback if specific col not found, assume 1228 standard ratios
-        default_bf = default_d / 2.0 
-        
-    default_tf = get_cm('t', 0.5)
-    default_tw = get_cm('t', 0.5)
-    
-    pass # Continue to code block below for usage
+# ── (Optional) Override ────────────────────────────────────────
+with st.expander("✏️ แก้ไขค่าคุณสมบัติด้วยตนเอง (Optional Override)", expanded=False):
+    oc1, oc2, oc3 = st.columns(3)
+    d_cm   = oc1.number_input("d (cm)",    value=d_cm,   format="%.3f", key="rf_ov_d")
+    bf_cm  = oc1.number_input("bf (cm)",   value=bf_cm,  format="%.3f", key="rf_ov_bf")
+    tf_cm  = oc1.number_input("tf (cm)",   value=tf_cm,  format="%.4f", key="rf_ov_tf")
+    tw_cm  = oc1.number_input("tw (cm)",   value=tw_cm,  format="%.4f", key="rf_ov_tw")
+    area   = oc2.number_input("Area (cm²)",value=area,   format="%.3f", key="rf_ov_A")
+    Ix_v   = oc2.number_input("Ix (cm⁴)",  value=Ix_v,   format="%.2f", key="rf_ov_Ix")
+    Zx_v   = oc2.number_input("Zx (cm³)",  value=Zx_v,   format="%.2f", key="rf_ov_Zx")
+    Sx_v   = oc2.number_input("Sx (cm³)",  value=Sx_v,   format="%.2f", key="rf_ov_Sx")
+    ry_v   = oc3.number_input("ry (cm)",   value=ry_v,   format="%.4f", key="rf_ov_ry")
+    rts_v  = oc3.number_input("rts (cm)",  value=rts_v,  format="%.4f", key="rf_ov_rts")
+    J_v    = oc3.number_input("J (cm⁴)",   value=J_v,    format="%.4f", key="rf_ov_J")
+    h0_v   = oc3.number_input("h0 (cm)",   value=h0_v,   format="%.3f", key="rf_ov_h0")
 
-    default_A = float(row.get('Area', 0))
-    default_Ix = float(row.get('Ix', 0))
-    default_Zx = float(row.get('Zx', 0)) # Usually Elastic in CF table
-    default_Sx = default_Zx # Approx if missing
-    default_ry = default_d * 0.40 # Rough approx for C-channel
+st.divider()
 
+# ─────────────────────────────────────────────────────────────
+# RUN DESIGN
+# ─────────────────────────────────────────────────────────────
+should_calc = live_calc
+if not live_calc:
+    should_calc = st.button("เริ่มคำนวณ", type="primary", key="rf_calc_btn")
 
-with st.expander("ตั้งค่าคุณสมบัติหน้าตัดเพิ่มเติม", expanded=True):
-    c1, c2, c3 = st.columns(3)
-    
-    # Column 1: Basic Dimensions
-    with c1:
-        d_cm = st.number_input("ความลึกหน้าตัด d (ซม.)", value=default_d, format="%.2f")
-        bf_cm = st.number_input("ความกว้างปีก bf (ซม.)", value=default_bf, format="%.2f")
-        tf_cm = st.number_input("ความหนาปีก tf (ซม.)", value=default_tf, format="%.3f")
-        tw_cm = st.number_input("ความหนาเว็บ tw (ซม.)", value=default_tw, format="%.3f")
-        
-    # Column 2: Structural Properties
-    with c2:
-        area_cm2 = st.number_input("พื้นที่หน้าตัด (ตร.ซม.)", value=default_A, format="%.2f")
-        ix_cm4 = st.number_input("โมเมนต์ความเฉื่อย Ix (ซม.^4)", value=default_Ix, format="%.2f")
-        zx_cm3 = st.number_input("โมดูลัสต้านทาน Zx (ซม.^3)", value=default_Zx, format="%.2f")
-        sx_cm3 = st.number_input("โมดูลัสหน้าตัด Sx (ซม.^3)", value=default_Sx, format="%.2f")
-        
-    # Column 3: Advanced / LTB
-    with c3:
-        ry_cm = st.number_input("รัศมีความเฉื่อย ry (ซม.)", value=default_ry, format="%.2f")
-        st.markdown("**กรอกค่าพารามิเตอร์ LTB หากมีข้อมูล**")
-        rts_cm = st.number_input("rts (ซม.)", value=0.0, format="%.2f")
-        J_cm4 = st.number_input("J (ซม.^4)", value=0.0, format="%.2f")
-        h0_cm = st.number_input("h0 (ซม.)", value=0.0, format="%.2f")
-
-# Auto-calculate if live calculation is enabled, or manual button
-should_calculate_rafter = live_calc_rafter
-if not live_calc_rafter:
-    should_calculate_rafter = st.button("เริ่มคำนวณ", type="primary")
-
-if should_calculate_rafter:
-    # 1. Prepare Data
-    # Handle inputs
+if should_calc:
     section_data = {
-        'd': d_cm,
-        'bf': bf_cm,
-        'tf': tf_cm,
-        'tw': tw_cm,
-        'Area': area_cm2,
-        'Ix': ix_cm4,
-        'Zx': zx_cm3,
-        'Sx': sx_cm3,
-        'ry': ry_cm,
-        'Weight': row.get('Weight', 0)
+        "name":   section_name,
+        "d":      d_cm,
+        "bf":     bf_cm,
+        "tf":     tf_cm,
+        "tw":     tw_cm,
+        "Area":   area,
+        "Ix":     Ix_v,
+        "Zx":     Zx_v,
+        "Sx":     Sx_v,
+        "ry":     ry_v,
+        "Weight": wt_v,
     }
-    
-    # Add optional if provided
-    if rts_cm > 0: section_data['rts'] = rts_cm
-    if J_cm4 > 0: section_data['J'] = J_cm4
-    if h0_cm > 0: section_data['h0'] = h0_cm
-    
-    geometry = {
-        'span': span,
-        'spacing': spacing,
-        'slope': slope,
-        'Lb': lb
-    }
-    
-    load_inputs = {
-        'DL': dl,
-        'LL': ll,
-        'WL': wl
-    }
-    
-    materials = {
-        'Fy': fy,
-        'E': E
-    }
-    
-    # 2. Run Design
-    design = RafterDesign(section_data, geometry, load_inputs, materials)
-    res = design.run_design()
-    
-    # 3. Display Results
-    
-    # A. Summary Status with Emoji Reactions
-    checks = res['Checks']['Status']
+    if rts_v > 0: section_data["rts"] = rts_v
+    if J_v   > 0: section_data["J"]   = J_v
+    if h0_v  > 0: section_data["h0"]  = h0_v
+
+    geometry   = {"span": span, "spacing": spacing, "slope": slope, "Lb": lb}
+    load_input = {"DL": dl, "LL": ll, "WL": wl}
+    materials  = {"Fy": fy, "E": E}
+
+    design = RafterDesign(section_data, geometry, load_input, materials)
+    res    = design.run_design()
+
+    checks = res["Checks"]["Status"]
+    ratios = res["Checks"]["Ratios"]
+    defl_detail = res["Checks"].get("Deflection", {})
     all_pass = all(checks.values())
-    
-    overall_emoji = "✅" if all_pass else "❌"
-    st.markdown(f'<div style="text-align: center; font-size: 4rem;">{overall_emoji}</div>', unsafe_allow_html=True)
-    if all_pass:
-        st.markdown('<div class="status-pass" style="text-align: center; font-size: 1.5rem; font-weight: 700;">ผ่านเกณฑ์การออกแบบ</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="status-fail" style="text-align: center; font-size: 1.5rem; font-weight: 700;">ไม่ผ่านเกณฑ์การออกแบบ</div>', unsafe_allow_html=True)
-        
-    # Display Ratios with Emoji Reactions
-    ratios = res['Checks']['Ratios']
-    defl_detail = res['Checks'].get('Deflection', {})
-    c_res1, c_res2, c_res3 = st.columns(3)
-    
-    # Moment
-    moment_emoji_r = "✅" if checks['Moment'] else ("⚠️" if ratios['Moment'] > 0.8 else "❌")
-    moment_class_r = "status-pass" if checks['Moment'] else ("status-warning" if ratios['Moment'] > 0.8 else "status-fail")
-    c_res1.markdown(f"""
-    <div style="text-align: center;">
-        <div style="font-size: 3rem;">{moment_emoji_r}</div>
-        <div style="font-size: 0.9rem; color: #b0b0b0;">กำลังดัด</div>
-        <div style="font-size: 2rem; font-weight: 700;" class="{moment_class_r}">{ratios['Moment']:.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Shear
-    shear_emoji_r = "✅" if checks['Shear'] else ("⚠️" if ratios['Shear'] > 0.8 else "❌")
-    shear_class_r = "status-pass" if checks['Shear'] else ("status-warning" if ratios['Shear'] > 0.8 else "status-fail")
-    c_res2.markdown(f"""
-    <div style="text-align: center;">
-        <div style="font-size: 3rem;">{shear_emoji_r}</div>
-        <div style="font-size: 0.9rem; color: #b0b0b0;">กำลังเฉือน</div>
-        <div style="font-size: 2rem; font-weight: 700;" class="{shear_class_r}">{ratios['Shear']:.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Deflection
-    defl_emoji_r = "✅" if checks['Deflection'] else ("⚠️" if ratios['Deflection'] > 0.8 else "❌")
-    defl_class_r = "status-pass" if checks['Deflection'] else ("status-warning" if ratios['Deflection'] > 0.8 else "status-fail")
-    c_res3.markdown(f"""
-    <div style="text-align: center;">
-        <div style="font-size: 3rem;">{defl_emoji_r}</div>
-        <div style="font-size: 0.9rem; color: #b0b0b0;">การโก่งตัว</div>
-        <div style="font-size: 2rem; font-weight: 700;" class="{defl_class_r}">{ratios['Deflection']:.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
 
-    # B. Detailed Steps
-    st.markdown("### 📝 รายละเอียดการคำนวณ")
-    
-    for step in res['Steps']:
-        with st.container():
-            # Title with Icon based on status
-            icon = "✅" if step.get('status') == 'PASS' else ("❌" if step.get('status') == 'FAIL' else "ℹ️")
-            st.markdown(f"**{icon} {step['title']}**")
-            
-            st.latex(step['latex'])
-            note = step.get('note')
-            if note:
-                st.markdown(f"_{note}_")
-            st.divider()
+    # ── Status Banner ─────────────────────────────────────────
+    banner_emoji = "✅" if all_pass else "❌"
+    banner_class = "status-pass" if all_pass else "status-fail"
+    banner_text  = "ผ่านเกณฑ์การออกแบบ" if all_pass else "ไม่ผ่านเกณฑ์การออกแบบ"
+    st.markdown(
+        f'<div style="text-align:center;font-size:3.5rem;">{banner_emoji}</div>'
+        f'<div class="{banner_class}" style="text-align:center;font-size:1.4rem;font-weight:700;">'
+        f'{banner_text}</div>',
+        unsafe_allow_html=True,
+    )
 
-    # C. Result Summary Table
+    # ── Ratio Cards ───────────────────────────────────────────
+    st.markdown("")
+    c1, c2, c3 = st.columns(3)
+    for col, key, label in [(c1, "Moment", "กำลังดัด"), (c2, "Shear", "กำลังเฉือน"), (c3, "Deflection", "การโก่งตัว")]:
+        ok  = checks[key]
+        r   = ratios[key]
+        em  = "✅" if ok else ("⚠️" if r > 0.8 else "❌")
+        cls = "status-pass" if ok else ("status-warning" if r > 0.8 else "status-fail")
+        col.markdown(
+            f'<div style="text-align:center;">'
+            f'<div style="font-size:2.8rem;">{em}</div>'
+            f'<div style="font-size:0.85rem;color:#b0b0b0;">{label}</div>'
+            f'<div style="font-size:1.9rem;font-weight:700;" class="{cls}">{r:.2f}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Summary Table ─────────────────────────────────────────
     st.markdown("### 📊 เปรียบเทียบความต้องการกับกำลังต้านทาน")
-    demand = res['Checks']['Demand']
-    capacity = res['Checks']['Capacity']
-    defl_total = defl_detail.get('Total') or {'value': float('nan'), 'limit': float('nan'), 'ratio': float('nan'), 'pass': False}
-    defl_live = defl_detail.get('Live') or {'value': float('nan'), 'limit': float('nan'), 'ratio': float('nan'), 'pass': False}
 
-    summary_data = {
+    demand   = res["Checks"]["Demand"]
+    capacity = res["Checks"]["Capacity"]
+    dt = defl_detail.get("Total") or {"value": float("nan"), "limit": float("nan"), "ratio": float("nan"), "pass": False}
+    dl_ = defl_detail.get("Live")  or {"value": float("nan"), "limit": float("nan"), "ratio": float("nan"), "pass": False}
+
+    def _rs(val):
+        v = str(val)
+        if "ผ่าน" in v:  return "color:#00ff41;font-weight:700;"
+        if "ไม่ผ่าน" in v: return "color:#ff0040;font-weight:700;"
+        return ""
+
+    summary = pd.DataFrame({
         "การตรวจสอบ": ["กำลังดัด", "กำลังเฉือน", "การโก่งตัวรวม", "การโก่งตัวจาก LL"],
         "ค่าที่ต้องรับ": [
             f"{demand['Mu']:.2f} กก.-ม.",
             f"{demand['Vu']:.2f} กก.",
-            f"{defl_total['value']:.2f} ซม.",
-            f"{defl_live['value']:.2f} ซม."
+            f"{dt['value']:.3f} ซม.",
+            f"{dl_['value']:.3f} ซม.",
         ],
         "ค่ากำลัง/เกณฑ์": [
             f"{capacity['Phi_Mn']:.2f} กก.-ม.",
             f"{capacity['Phi_Vn']:.2f} กก.",
-            f"{capacity['Delta_Limit_Total']:.2f} ซม.",
-            f"{capacity['Delta_Limit_Live']:.2f} ซม."
+            f"{capacity['Delta_Limit_Total']:.3f} ซม.",
+            f"{capacity['Delta_Limit_Live']:.3f} ซม.",
         ],
-        "อัตราส่วน": [
-            ratios['Moment'],
-            ratios['Shear'],
-            defl_total['ratio'],
-            defl_live['ratio']
+        "อัตราส่วน": [ratios["Moment"], ratios["Shear"], dt["ratio"], dl_["ratio"]],
+        "ผล": [
+            "✅ ผ่าน" if checks["Moment"] else "❌ ไม่ผ่าน",
+            "✅ ผ่าน" if checks["Shear"]  else "❌ ไม่ผ่าน",
+            "✅ ผ่าน" if dt["pass"]       else "❌ ไม่ผ่าน",
+            "✅ ผ่าน" if dl_["pass"]      else "❌ ไม่ผ่าน",
         ],
-        "ผลการตรวจ": [
-            "ผ่าน" if checks['Moment'] else "ไม่ผ่าน",
-            "ผ่าน" if checks['Shear'] else "ไม่ผ่าน",
-            "ผ่าน" if defl_total['pass'] else "ไม่ผ่าน",
-            "ผ่าน" if defl_live['pass'] else "ไม่ผ่าน"
-        ]
-    }
-    st.dataframe(pd.DataFrame(summary_data).style.format({'อัตราส่วน': '{:.2f}'}))
-    
-    st.divider()
-    
-    # D. Report Generation
+    })
+    st.dataframe(
+        summary.style.format({"อัตราส่วน": "{:.3f}"}).map(_rs, subset=["ผล"]),
+        use_container_width=True,
+    )
+
+    # ── Calculation Steps ─────────────────────────────────────
+    with st.expander("📝 ขั้นตอนการคำนวณแบบละเอียด", expanded=False):
+        for step in res["Steps"]:
+            icon = "✅" if step.get("status") == "PASS" else ("❌" if step.get("status") == "FAIL" else "ℹ️")
+            st.markdown(f"**{icon} {step['title']}**")
+            st.latex(step["latex"])
+            if step.get("note"):
+                st.markdown(f"_{step['note']}_")
+            st.divider()
+
+    # ── PDF Report ────────────────────────────────────────────
     st.subheader("📄 รายงานผลคำนวณ")
-    
-    with st.expander("รายละเอียดโครงการสำหรับรายงาน"):
-        col1, col2, col3 = st.columns(3)
-        p_name = col1.text_input("ชื่อโครงการ", "New Warehouse")
-        p_owner = col2.text_input("เจ้าของโครงการ", "Client A")
-        p_eng = col3.text_input("วิศวกรผู้ออกแบบ", "Eng. Sarayut")
-        
-    project_info = {'Project Name': p_name, 'Owner': p_owner, 'Engineer': p_eng}
-    inputs_dict = {'geometry': geometry, 'loads': load_inputs, 'materials': materials}
-    
-    if st.button("สร้างรายงาน PDF", key="rafter_pdf"):
+    with st.expander("ข้อมูลโครงการสำหรับรายงาน"):
+        rc1, rc2, rc3 = st.columns(3)
+        p_name  = rc1.text_input("ชื่อโครงการ",      "New Warehouse",  key="rf_pname")
+        p_owner = rc2.text_input("เจ้าของโครงการ",   "Client A",       key="rf_powner")
+        p_eng   = rc3.text_input("วิศวกรผู้ออกแบบ",  "Eng. Sarayut",   key="rf_peng")
+
+    if st.button("สร้างรายงาน PDF", key="rf_pdf"):
         from report_generator import RafterReportGenerator
-        
-        # Add extra fields to section data for report
-        section_data['name'] = section_name
-        # section_data already has d, bf, tf etc. from Run Design step
-        
-        report = RafterReportGenerator(project_info, inputs_dict, res, section_data)
-        success, result_path = report.generate("Rafter_Design_Report.pdf")
-        
-        if success:
+        proj_info = {"Project Name": p_name, "Owner": p_owner, "Engineer": p_eng}
+        inputs    = {"geometry": geometry, "loads": load_input, "materials": materials}
+        section_data["name"] = section_name
+        report = RafterReportGenerator(proj_info, inputs, res, section_data)
+        ok_pdf, path_or_err = report.generate("Rafter_Design_Report.pdf")
+        if ok_pdf:
             st.success("สร้างรายงานสำเร็จ")
-            with open(result_path, "rb") as f:
-                st.download_button("ดาวน์โหลดรายงาน", f, "Rafter_Design_Report.pdf", "application/pdf")
+            with open(path_or_err, "rb") as f:
+                st.download_button("ดาวน์โหลดรายงาน PDF", f,
+                                   "Rafter_Design_Report.pdf", "application/pdf")
         else:
-            st.error(f"ไม่สามารถสร้างรายงานได้: {result_path}")
-            print(f"Rafter PDF Error: {result_path}")
+            st.error(f"สร้างรายงานไม่สำเร็จ: {path_or_err}")

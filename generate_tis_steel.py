@@ -1,111 +1,82 @@
-import pandas as pd
-import numpy as np
-import math
+"""
+generate_tis_steel.py
+สร้างตารางหน้าตัดเหล็กขึ้นรูปเย็น มอก. 1228-2549 (Lip-C Channel)
 
-# Standard sizes based on TIS 1228 and common market availability
-# Format: (h, b, c, t_list)
-standard_sizes = [
-    (60, 30, 10, [1.6, 2.3]),
-    (75, 35, 15, [1.6, 2.3]),
-    (75, 45, 15, [1.6, 2.3]),
-    (100, 50, 20, [1.6, 2.0, 2.3, 3.2]),
-    (125, 50, 20, [2.3, 3.2, 4.0, 4.5]),
-    (150, 50, 20, [2.3, 3.2, 4.0, 4.5]),
-    (150, 75, 20, [3.2, 4.0, 4.5]),
-    (200, 75, 20, [3.2, 4.0, 4.5, 6.0]),
-    (250, 75, 25, [3.2, 4.0, 4.5, 6.0]),
+Section name format: C-h×b×c×t
+  h = ความสูงเอว (mm)
+  b = ความกว้างปีก (mm)
+  c = ความสูงขอบพับ / lip (mm)
+  t = ความหนา (mm)
+"""
+
+import pandas as pd
+
+# (h, b, c, t,   Weight, Ix,      Zx/Sx,  Area,   Iy,    Sy)
+# หน่วย: mm, kg/m, cm⁴, cm³, cm²
+data = [
+    ( 60,  30,  10, 1.6, 1.68,    12.2,   4.07,  2.138,  1.2,  0.63),
+    ( 60,  30,  10, 2.3, 2.36,    16.7,   5.58,  3.008,  1.6,  0.85),
+    ( 75,  35,  15, 1.6, 2.12,    23.7,   6.33,  2.698,  1.9,  0.88),
+    ( 75,  35,  15, 2.3, 2.99,    32.9,   8.76,  3.813,  2.7,  1.23),
+    ( 75,  45,  15, 1.6, 2.37,    28.0,   7.48,  3.018,  4.5,  1.61),
+    ( 75,  45,  15, 2.3, 3.35,    38.9,  10.38,  4.273,  6.3,  2.26),
+    (100,  50,  20, 1.6, 2.93,    60.0,  12.00,  3.738,  6.4,  2.06),
+    (100,  50,  20, 2.0, 3.64,    73.9,  14.77,  4.640,  7.9,  2.54),
+    (100,  50,  20, 2.3, 4.17,    84.0,  16.79,  5.308,  9.0,  2.90),
+    (100,  50,  20, 3.2, 5.71,   112.8,  22.56,  7.270, 12.1,  3.88),
+    (125,  50,  20, 2.3, 4.62,   141.6,  22.66,  5.883,  9.2,  2.96),
+    (125,  50,  20, 3.2, 6.34,   191.1,  30.57,  8.070, 12.6,  4.03),
+    (125,  50,  20, 4.0, 7.82,   232.3,  37.17,  9.960, 15.4,  4.92),
+    (125,  50,  20, 4.5, 8.73,   256.8,  41.10, 11.115, 17.0,  5.44),
+    (150,  50,  20, 2.3, 5.07,   217.7,  29.02,  6.458,  9.3,  3.00),
+    (150,  50,  20, 3.2, 6.96,   294.6,  39.28,  8.870, 12.7,  4.07),
+    (150,  50,  20, 4.0, 8.60,   359.2,  47.90, 10.960, 15.6,  5.00),
+    (150,  50,  20, 4.5, 9.61,   397.8,  53.05, 12.240, 17.3,  5.54),
+    (150,  65,  20, 2.3, 5.53,   241.2,  32.16,  7.048, 19.0,  4.72),
+    (150,  65,  20, 3.2, 7.61,   327.5,  43.67,  9.697, 26.1,  6.48),
+    (150,  65,  20, 4.0, 9.42,   400.4,  53.39, 12.000, 32.1,  7.95),
+    (150,  75,  20, 3.2, 8.22,   380.8,  50.77, 10.470, 38.3,  8.37),
+    (150,  75,  20, 4.0,10.17,   465.8,  62.11, 12.960, 47.4, 10.34),
+    (150,  75,  20, 4.5,11.37,   516.9,  68.92, 14.490, 52.7, 11.49),
+    (200,  65,  20, 3.2, 8.57,   735.1,  73.51, 10.917, 27.0,  6.74),
+    (200,  65,  20, 4.0,10.63,   903.6,  90.36, 13.540, 33.4,  8.32),
+    (200,  75,  20, 3.2, 9.48,   742.2,  74.22, 12.070, 39.5,  8.67),
+    (200,  75,  20, 4.0,11.74,   910.9,  91.09, 14.960, 49.0, 10.73),
+    (200,  75,  20, 4.5,13.14,  1013.1, 101.31, 16.740, 54.6, 11.96),
+    (200,  75,  20, 6.0,17.24,  1304.4, 130.44, 21.960, 71.1, 15.56),
+    (200, 100,  25, 3.2,10.98,   857.2,  85.72, 13.990, 90.1, 14.72),
+    (200, 100,  25, 4.0,13.63,  1052.1, 105.21, 17.360,111.6, 18.21),
+    (200, 100,  25, 4.5,15.26,  1172.2, 117.22, 19.440,124.9, 20.37),
+    (250,  75,  25, 3.2,10.98,  1288.1, 103.05, 13.990, 40.4,  8.82),
+    (250,  75,  25, 4.0,13.63,  1585.1, 126.81, 17.360, 50.2, 10.94),
+    (250,  75,  25, 4.5,15.26,  1765.8, 141.26, 19.440, 56.1, 12.23),
+    (250,  75,  25, 6.0,20.06,  2285.1, 182.81, 25.560, 73.7, 16.07),
+    (250, 100,  25, 3.2,11.98,  1366.3, 109.30, 15.270, 91.6, 14.99),
+    (250, 100,  25, 4.0,14.87,  1683.7, 134.70, 18.950,113.7, 18.58),
+    (250, 100,  25, 4.5,16.65,  1878.7, 150.30, 21.220,127.5, 20.82),
+    (250, 100,  25, 6.0,21.93,  2445.1, 195.61, 27.960,168.0, 27.43),
+    (300, 100,  25, 4.0,16.11,  2828.5, 188.57, 20.540,115.5, 18.92),
+    (300, 100,  25, 4.5,18.05,  3157.3, 210.49, 22.980,129.4, 21.18),
+    (300, 100,  25, 6.0,23.80,  4126.2, 275.08, 30.330,171.6, 28.09),
 ]
 
-def calc_properties(h, b, c, t):
-    """
-    Calculate properties for Lipped Channel (Cold-formed)
-    Assumes square corners for simplicity (typical for software estimation if r is unknown)
-    or use centerline approximation.
-    
-    Using centerline model (more accurate for thin walled):
-    """
-    # Centerline dimensions
-    h_prime = h - t
-    b_prime = b - t
-    c_prime = c - t/2
-    
-    # Arc length of corners would improve accuracy, but straight line sum is close
-    # Total centerline length
-    L = h_prime + 2*b_prime + 2*c_prime
-    
-    # Area (cm2)
-    # A = L * t
-    # Dimensions in mm, so A in mm2 -> /100 for cm2
-    Area_mm2 = L * t
-    Area_cm2 = Area_mm2 / 100
-    
-    # Weight (kg/m)
-    # Density 7850 kg/m3
-    # W = A(m2) * 7850
-    Weight = (Area_mm2 / 1e6) * 7850
-    
-    # Moment of Inertia Ix (about strong axis)
-    # Using linear elements summation
-    # 1. Web: length h_prime, pos (0,0), vertical
-    #    I = L*h^2/12   -> t*h_prime^3/12
-    I_web = (t * h_prime**3) / 12
-    
-    # 2. Flanges (Top/Bottom): length b_prime, pos y = +/- h_prime/2
-    #    I = I_local + A*d^2 = t*b_prime^3/12 (approx 0 horizontal) + (b_prime*t)*(h_prime/2)^2
-    #    Since it's horizontal, Iy of rect is small, but Ix is Area*y^2
-    I_flanges = 2 * ( (b_prime * t) * (h_prime/2)**2 )
-    
-    # 3. Lips: length c_prime, vertical, pos y from +/- (h_prime/2 - c_prime/2)
-    #    Centroids at +/- (h_prime/2 - c_prime/2)
-    #    I = I_local + A*d^2
-    #    I_local = t*c_prime^3/12
-    #    d = h_prime/2 - c_prime/2 ?? No.
-    #    Lip goes from y=h_prime/2 down to h_prime/2 - c_prime.
-    #    Centroid of lip is at h_prime/2 - c_prime/2.
-    y_lip = h_prime/2 - c_prime/2
-    I_lips = 2 * ( (t * c_prime**3)/12 + (c_prime * t) * y_lip**2 )
-    
-    Ix_mm4 = I_web + I_flanges + I_lips
-    Ix_cm4 = Ix_mm4 / 10000
-    
-    # Section Modulus Zx (cm3)
-    # Zx = Ix / y_max
-    # y_max = h/2 (outer fiber)
-    Zx_cm3 = Ix_cm4 / (h/20) # h in mm, h/2 in mm, /10 -> cm
-    
-    return {
-        'Section': f"C-{h:.0f}x{b:.0f}x{c:.0f}x{t:.1f}",
-        'Weight': round(Weight, 2),
-        'Ix': round(Ix_cm4, 1),
-        'Zx': round(Zx_cm3, 2),
-        'Area': round(Area_cm2, 3), # Used as 'A' or 'Area'
-        'h': h,
-        't': t,
-        'b': b, # Keeping extra info is good
-        'c': c
-    }
+rows = []
+for h, b, c, t, W, Ix, Zx, Area, Iy, Sy in data:
+    rows.append({
+        "Section": f"C-{h}x{b}x{c}x{t}",
+        "Weight":  W,
+        "Ix":      Ix,
+        "Sx":      Zx,
+        "Zx":      Zx,
+        "Iy":      Iy,
+        "Sy":      Sy,
+        "Area":    Area,
+        "h":       h,
+        "b":       b,
+        "c":       c,
+        "t":       t,
+    })
 
-data = []
-for h, b, c, t_list in standard_sizes:
-    for t in t_list:
-        props = calc_properties(h, b, c, t)
-        data.append(props)
-
-df = pd.DataFrame(data)
-
-# Add metadata rows to match the "complex" structure if needed, 
-# but the app loader handles header search now. 
-# We'll stick to a clean CSV for the user generated file.
-# We will use keys: Section, Weight, Ix, Zx, Area, h, t
-df_final = df[['Section', 'Weight', 'Ix', 'Zx', 'Area', 'h', 't']]
-
-# Write to file
-# We'll overwrite both CSVs to be safe
-outfile1 = "tis_1228_steel.csv"
-outfile2 = "Roof-by-Sarayut-LRFD-V.1.0.3.xlsx - Data Steel.csv"
-
-# Write with header
-df_final.to_csv(outfile1, index=False)
-df_final.to_csv(outfile2, index=False)
-
-print(f"Generated {len(df)} sections.")
+df = pd.DataFrame(rows)
+df.to_csv("tis_1228_steel.csv", index=False)
+print(f"Generated {len(df)} sections -> tis_1228_steel.csv")

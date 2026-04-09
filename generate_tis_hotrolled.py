@@ -1,135 +1,195 @@
+"""
+generate_tis_hotrolled.py
+สร้างตารางหน้าตัดเหล็กรีดร้อนตามมาตรฐาน มอก. 1227-2537
+ครอบคลุม HN (คาน/จันทัน), HW (เสา), HM (คาน-เสา), I-Beam (ลิ่ม)
+
+คอลัมน์ผลลัพธ์ (หน่วย):
+  Section  : ชื่อหน้าตัด
+  Type     : HN / HW / HM / I
+  Weight   : น้ำหนัก (kg/m)
+  Area     : พื้นที่หน้าตัด (cm²)
+  Ix       : โมเมนต์ความเฉื่อยแกน x-x (cm⁴)
+  Iy       : โมเมนต์ความเฉื่อยแกน y-y (cm⁴)
+  Sx       : โมดูลัสหน้าตัดยืดหยุ่น x-x (cm³)
+  Zx       : โมดูลัสหน้าตัดพลาสติก x-x (cm³)
+  rx       : รัศมีไจเรชันแกน x-x (cm)
+  ry       : รัศมีไจเรชันแกน y-y (cm)
+  h        : ความลึกทั้งหมด (mm)
+  b        : ความกว้างปีก (mm)
+  tw       : ความหนาเอว (mm)
+  tf       : ความหนาปีก (mm)
+  J        : ค่าคงที่บิด Torsional Constant (cm⁴)
+  h0       : ระยะระหว่างเซนทรอยด์ปีก (cm)
+  Cw       : Warping Constant (cm⁶)
+  rts      : รัศมีไจเรชันประสิทธิผลสำหรับ LTB (cm)
+"""
+
+import math
 import pandas as pd
-import numpy as np
 
-# Standard TIS 1227 Wide Flange (H-Beam)
-# Format: Name, h, b, tw, tf, r (approx)
-# Units: mm
-standard_WF = [
-    ("H-100x50x5x7", 100, 50, 5, 7, 8),
-    ("H-125x60x6x8", 125, 60, 6, 8, 8),
-    ("H-150x75x5x7", 150, 75, 5, 7, 8),
-    ("H-175x90x5x8", 175, 90, 5, 8, 8),
-    ("H-198x99x4.5x7", 198, 99, 4.5, 7, 11), # Common light WF
-    ("H-200x100x5.5x8", 200, 100, 5.5, 8, 11),
-    ("H-248x124x5x8", 248, 124, 5, 8, 12),
-    ("H-250x125x6x9", 250, 125, 6, 9, 12),
-    ("H-298x149x5.5x8", 298, 149, 5.5, 8, 13),
-    ("H-300x150x6.5x9", 300, 150, 6.5, 9, 13),
-    ("H-346x174x6x9", 346, 174, 6, 9, 14),
-    ("H-350x175x7x11", 350, 175, 7, 11, 14),
-    ("H-396x199x7x11", 396, 199, 7, 11, 16),
-    ("H-400x200x8x13", 400, 200, 8, 13, 16),
-    ("H-446x199x8x12", 446, 199, 8, 12, 18),
-    ("H-450x200x9x14", 450, 200, 9, 14, 18),
-    ("H-500x200x10x16", 500, 200, 10, 16, 20),
+# ─────────────────────────────────────────────────────────────
+# ข้อมูลมิติ: (name, h, b, tw, tf)  — หน่วย mm
+# ─────────────────────────────────────────────────────────────
+
+# HN — Narrow Flange (คาน / จันทัน)
+HN = [
+    ("HN-100x50x5x7",       100,  50,  5.0,  7.0),
+    ("HN-125x60x6x8",       125,  60,  6.0,  8.0),
+    ("HN-150x75x5x7",       150,  75,  5.0,  7.0),
+    ("HN-175x90x5x8",       175,  90,  5.0,  8.0),
+    ("HN-198x99x4.5x7",     198,  99,  4.5,  7.0),
+    ("HN-200x100x5.5x8",    200, 100,  5.5,  8.0),
+    ("HN-248x124x5x8",      248, 124,  5.0,  8.0),
+    ("HN-250x125x6x9",      250, 125,  6.0,  9.0),
+    ("HN-298x149x5.5x8",    298, 149,  5.5,  8.0),
+    ("HN-300x150x6.5x9",    300, 150,  6.5,  9.0),
+    ("HN-346x174x6x9",      346, 174,  6.0,  9.0),
+    ("HN-350x175x7x11",     350, 175,  7.0, 11.0),
+    ("HN-396x199x7x11",     396, 199,  7.0, 11.0),
+    ("HN-400x200x8x13",     400, 200,  8.0, 13.0),
+    ("HN-446x199x8x12",     446, 199,  8.0, 12.0),
+    ("HN-450x200x9x14",     450, 200,  9.0, 14.0),
+    ("HN-496x199x9x14",     496, 199,  9.0, 14.0),
+    ("HN-500x200x10x16",    500, 200, 10.0, 16.0),
+    ("HN-596x199x10x15",    596, 199, 10.0, 15.0),
+    ("HN-600x200x11x17",    600, 200, 11.0, 17.0),
+    ("HN-692x300x13x20",    692, 300, 13.0, 20.0),
+    ("HN-700x300x13x24",    700, 300, 13.0, 24.0),
+    ("HN-800x300x14x26",    800, 300, 14.0, 26.0),
+    ("HN-900x300x16x28",    900, 300, 16.0, 28.0),
 ]
 
-# Standard TIS 1227 I-Beam (Tapered Flange - S-Shape in US)
-# Format: Name, h, b, tw, tf
-standard_I = [
-    ("I-150x75x5.5x9.5", 150, 75, 5.5, 9.5, 0),
-    ("I-200x100x7x10", 200, 100, 7, 10, 0),
-    ("I-250x125x7.5x12.5", 250, 125, 7.5, 12.5, 0),
+# HW — Wide Flange (เสา / Heavy Beam)
+HW = [
+    ("HW-100x100x6x8",      100, 100,  6.0,  8.0),
+    ("HW-125x125x6.5x9",    125, 125,  6.5,  9.0),
+    ("HW-150x150x7x10",     150, 150,  7.0, 10.0),
+    ("HW-175x175x7.5x11",   175, 175,  7.5, 11.0),
+    ("HW-200x200x8x12",     200, 200,  8.0, 12.0),
+    ("HW-200x204x12x12",    200, 204, 12.0, 12.0),
+    ("HW-244x252x11x11",    244, 252, 11.0, 11.0),
+    ("HW-250x250x9x14",     250, 250,  9.0, 14.0),
+    ("HW-294x302x12x12",    294, 302, 12.0, 12.0),
+    ("HW-300x300x10x15",    300, 300, 10.0, 15.0),
+    ("HW-300x305x15x15",    300, 305, 15.0, 15.0),
+    ("HW-344x354x16x16",    344, 354, 16.0, 16.0),
+    ("HW-350x350x12x19",    350, 350, 12.0, 19.0),
+    ("HW-388x402x15x15",    388, 402, 15.0, 15.0),
+    ("HW-390x400x13x21",    390, 400, 13.0, 21.0),
+    ("HW-400x400x13x21",    400, 400, 13.0, 21.0),
+    ("HW-414x405x18x28",    414, 405, 18.0, 28.0),
 ]
 
-def calc_wf_properties(name, h, b, tw, tf, r):
-    """
-    Calculate properties for Wide Flange / H-Beam
-    Metric units: h,b,tw,tf,r in mm
-    Output units: cm, cm2, cm3, cm4, kg/m
-    """
-    
-    # Area (A)
-    # A = 2*bf*tf + (d - 2*tf)*tw + (4 - pi)*r^2 ... approx
-    # Simplified: A = 2*b*tf + (h-2*tf)*tw
-    A_mm2 = 2 * b * tf + (h - 2*tf) * tw
-    if r > 0:
-        # Add fillet area approx: 2 fillets per side of web = 4 fillets
-        # Area of one fillet = r^2 - (pi*r^2)/4 = r^2(1 - pi/4) approx 0.2146 r^2
-        A_mm2 += 4 * (1 - np.pi/4) * r**2
-        
-    Area_cm2 = A_mm2 / 100
-    
-    # Weight (kg/m)
-    Weight = (A_mm2 / 1e6) * 7850
-    
-    # Moment of Inertia Ix (Strong Axis)
-    # I = I_web + I_flanges
-    # I_web = tw * (h - 2*tf)^3 / 12
-    # I_flanges = 2 * [ b*tf^3/12 + (b*tf)*(h/2 - tf/2)^2 ]
-    
-    h_web = h - 2*tf
-    I_web = (tw * h_web**3) / 12
-    I_flange_local = (b * tf**3) / 12
-    I_flange_steine = (b * tf) * ((h - tf)/2)**2
-    Ix_mm4 = I_web + 2 * (I_flange_local + I_flange_steine)
-    
-    # Approximate fillets contribution to I
-    # Ignored for consistency with simple hand calcs, usually small < 5%
-    
-    Ix_cm4 = Ix_mm4 / 10000
-    
-    # Section Modulus Zx = 2*Ix / h
-    Zx_cm3 = (Ix_mm4 / (h/2)) / 1000 # mm3 -> cm3
-    
-    # Plastic Modulus Sx (Z in AISC, here we call Zx -> Sx in legacy or vice versa?)
-    # AISC: Sx = Elastic, Zx = Plastic
-    # Thai usage: Zx often refers to Elastic Section Modulus (S in AISC).
-    # Wait, the code uses 'Zx' for input.
-    # In purlin_design.py: mn = zx * fy -> implies Plastic Moment? Or Elastic?
-    # Cold-formed usually uses Elastic (Sx) for initial yield -> Mn = Sx * Fy (Seff).
-    # Hot-rolled AISC: Mn = Zx * Fy (Plastic)
-    # Let's verify variable names in current code.
-    # In rafter_design.py: 
-    #   mp_kgm = (fy * zx) / 100  --> Zx is Plastic Modulus
-    #   mn = ... (mp_kgm ... 0.7*fy*sx) --> Sx is Elastic Modulus
-    # So we need both Zx (Plastic) and Sx (Elastic).
-    
-    # Elastic Modulus Sx
-    Sx_cm3 = Zx_cm3 # This calculation above (2I/h) is ELASTIC modulus.
-    
-    # Plastic Modulus Zx_plastic
-    # Z_plastic = b*tf*(h-tf) + tw*(h/2 - tf)^2
-    Z_plast_mm3 = b * tf * (h - tf) + tw * (h/2 - tf)**2
-    Zx_plastic_cm3 = Z_plast_mm3 / 1000
-    
-    # Radius of gyration ry
-    # Iy calculation
-    # Iy = 2*tf*b^3/12 + (h-2tf)*tw^3/12
-    Iy_mm4 = 2 * (tf * b**3)/12 + (h - 2*tf) * tw**3 / 12
-    Iy_cm4 = Iy_mm4 / 10000
-    
-    ry_mm = np.sqrt(Iy_mm4 / A_mm2)
-    ry_cm = ry_mm / 10
-    
+# HM — Medium Flange (คาน-เสา)
+HM = [
+    ("HM-148x100x6x9",      148, 100,  6.0,  9.0),
+    ("HM-150x100x6x9",      150, 100,  6.0,  9.0),
+    ("HM-194x150x6x9",      194, 150,  6.0,  9.0),
+    ("HM-198x150x4.5x9",    198, 150,  4.5,  9.0),
+    ("HM-200x150x6.5x9",    200, 150,  6.5,  9.0),
+    ("HM-244x175x7x11",     244, 175,  7.0, 11.0),
+    ("HM-248x175x5x8",      248, 175,  5.0,  8.0),
+    ("HM-250x175x7x11",     250, 175,  7.0, 11.0),
+    ("HM-294x200x8x12",     294, 200,  8.0, 12.0),
+    ("HM-298x201x9x14",     298, 201,  9.0, 14.0),
+    ("HM-300x200x8x12",     300, 200,  8.0, 12.0),
+    ("HM-340x250x9x14",     340, 250,  9.0, 14.0),
+    ("HM-344x248x8x12",     344, 248,  8.0, 12.0),
+    ("HM-350x250x9x14",     350, 250,  9.0, 14.0),
+    ("HM-390x300x10x16",    390, 300, 10.0, 16.0),
+    ("HM-400x300x10x16",    400, 300, 10.0, 16.0),
+    ("HM-440x300x11x18",    440, 300, 11.0, 18.0),
+    ("HM-450x300x11x18",    450, 300, 11.0, 18.0),
+    ("HM-488x300x11x18",    488, 300, 11.0, 18.0),
+    ("HM-500x300x11x18",    500, 300, 11.0, 18.0),
+    ("HM-582x300x12x17",    582, 300, 12.0, 17.0),
+    ("HM-588x300x12x20",    588, 300, 12.0, 20.0),
+    ("HM-600x300x12x20",    600, 300, 12.0, 20.0),
+]
+
+# I-Beam — ปีกลิ่ม (Tapered Flange, JIS I-shape)
+I_BEAM = [
+    ("I-100x50x5x7.5",      100,  50,  5.0,  7.5),
+    ("I-120x58x5.5x8.3",    120,  58,  5.5,  8.3),
+    ("I-150x75x5.5x9.5",    150,  75,  5.5,  9.5),
+    ("I-180x82x6x10",       180,  82,  6.0, 10.0),
+    ("I-200x100x7x10",      200, 100,  7.0, 10.0),
+    ("I-230x90x7x11",       230,  90,  7.0, 11.0),
+    ("I-250x125x7.5x12.5",  250, 125,  7.5, 12.5),
+    ("I-300x125x8x13",      300, 125,  8.0, 13.0),
+]
+
+
+# ─────────────────────────────────────────────────────────────
+# คำนวณคุณสมบัติ
+# ─────────────────────────────────────────────────────────────
+def calc(name: str, sec_type: str, h: float, b: float, tw: float, tf: float):
+    hw = h - 2 * tf          # ความสูงเอว (mm)
+    A  = 2*b*tf + hw*tw      # พื้นที่ (mm²)
+
+    # โมเมนต์ความเฉื่อย (mm⁴)
+    Ix = (b*h**3 - (b-tw)*hw**3) / 12
+    Iy = 2 * (tf*b**3/12) + hw * (tw**3/12)
+
+    # โมดูลัส
+    Sx = Ix / (h/2)                          # Elastic (mm³)
+    Zx = b*tf*(h-tf) + tw*(h/2-tf)**2        # Plastic (mm³)
+
+    # รัศมีไจเรชัน (mm)
+    rx = math.sqrt(Ix / A)
+    ry = math.sqrt(Iy / A)
+
+    # น้ำหนัก
+    W = A / 1e6 * 7850   # kg/m
+
+    # ──── LTB Parameters ────
+    # Torsional constant J (mm⁴): thin-walled open section
+    J  = (2*b*tf**3 + hw*tw**3) / 3
+
+    # Distance between flange centroids (mm)
+    h0 = h - tf
+
+    # Warping constant Cw (mm⁶): doubly symmetric I-section
+    Cw = Iy * h0**2 / 4
+
+    # Effective radius of gyration rts (mm): AISC 360-16 Eq. F2-7
+    # rts² = sqrt(Iy*Cw) / Sx
+    rts = math.sqrt(math.sqrt(Iy * Cw) / Sx)
+
+    # แปลงหน่วยเป็น cm
     return {
-        'Section': name,
-        'Weight': round(Weight, 2),
-        'Area': round(Area_cm2, 2),
-        'Ix': round(Ix_cm4, 1),
-        'Iy': round(Iy_cm4, 1),
-        'Sx': round(Sx_cm3, 1), # Elastic
-        'Zx': round(Zx_plastic_cm3, 1), # Plastic
-        'ry': round(ry_cm, 2),
-        'h': h,
-        'b': b,
-        'tw': tw,
-        'tf': tf
+        "Section": name,
+        "Type":    sec_type,
+        "Weight":  round(W,  2),
+        "Area":    round(A  / 100,    3),
+        "Ix":      round(Ix / 1e4,    1),
+        "Iy":      round(Iy / 1e4,    2),
+        "Sx":      round(Sx / 1e3,    2),
+        "Zx":      round(Zx / 1e3,    2),
+        "rx":      round(rx / 10,     3),
+        "ry":      round(ry / 10,     3),
+        "h":   h,
+        "b":   b,
+        "tw":  tw,
+        "tf":  tf,
+        "J":   round(J  / 1e4,    4),
+        "h0":  round(h0 / 10,     3),
+        "Cw":  round(Cw / 1e6,    2),
+        "rts": round(rts / 10,    3),
     }
 
-data = []
-for item in standard_WF:
-    props = calc_wf_properties(*item)
-    data.append(props)
 
-for item in standard_I:
-    props = calc_wf_properties(*item)
-    # I-Beam has tapered flanges, this is approx
-    props['Section'] = item[0] + " (Approx)" 
-    data.append(props)
+rows = []
+for name, h, b, tw, tf in HN:
+    rows.append(calc(name, "HN", h, b, tw, tf))
+for name, h, b, tw, tf in HW:
+    rows.append(calc(name, "HW", h, b, tw, tf))
+for name, h, b, tw, tf in HM:
+    rows.append(calc(name, "HM", h, b, tw, tf))
+for name, h, b, tw, tf in I_BEAM:
+    rows.append(calc(name, "I",  h, b, tw, tf))
 
-df = pd.DataFrame(data)
-
-outfile = "tis_1227_steel.csv"
-df.to_csv(outfile, index=False)
-print(f"Generated {len(df)} hot-rolled sections to {outfile}")
+df = pd.DataFrame(rows)
+df.to_csv("tis_1227_steel.csv", index=False)
+print(f"Generated {len(df)} sections -> tis_1227_steel.csv")
+print(df.groupby("Type").size().to_string())
