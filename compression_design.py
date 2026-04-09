@@ -124,6 +124,7 @@ class CompressionDesign(CalculationLogMixin):
             lam_rf = 0.56 * math.sqrt(E / Fy)
             flange_ok = lam_f <= lam_rf
 
+            _f_cmp = r"\leq" if flange_ok else ">"
             self.add_step(
                 "ตรวจสอบ Local Buckling ปีก (Flange, Unstiffened)",
                 r"\lambda_f = \frac{b_f}{2t_f},\quad \lambda_{rf} = 0.56\sqrt{\frac{E}{F_y}}",
@@ -131,8 +132,8 @@ class CompressionDesign(CalculationLogMixin):
                     rf"\lambda_f = \frac{{{self.bf:.1f}}}{{2\times{self.tf:.1f}}} = {lam_f:.3f}"
                     rf",\quad \lambda_{{rf}} = 0.56\sqrt{{\frac{{{E:.3e}}}{{{Fy:.0f}}}}} = {lam_rf:.3f}"
                 ),
-                rf"\lambda_f = {lam_f:.3f} \;{'\\leq' if flange_ok else '>'}\; \lambda_{{rf}} = {lam_rf:.3f} "
-                rf"\;\Rightarrow\; \text{{'Non-slender' if flange_ok else 'Slender'}}",
+                rf"\lambda_f = {lam_f:.3f} \;{_f_cmp}\; \lambda_{{rf}} = {lam_rf:.3f}"
+                rf"\;\Rightarrow\; \textbf{{{'Non-Slender' if flange_ok else 'Slender'}}}",
                 status="PASS" if flange_ok else "WARN",
                 note="AISC 360-16 Table B4.1a Case 1: ปีกรับแรงอัดแบบ Unstiffened",
             )
@@ -171,8 +172,8 @@ class CompressionDesign(CalculationLogMixin):
                     rf"\lambda_w = \frac{{{h_clear:.1f}}}{{{self.tw:.1f}}} = {lam_w:.3f}"
                     rf",\quad \lambda_{{rw}} = 1.49\sqrt{{\frac{{{E:.3e}}}{{{Fy:.0f}}}}} = {lam_rw:.3f}"
                 ),
-                rf"\lambda_w = {lam_w:.3f} \;{'\\leq' if web_ok else '>'}\; \lambda_{{rw}} = {lam_rw:.3f} "
-                rf"\;\Rightarrow\; \text{{'Non-slender' if web_ok else 'Slender'}}",
+                rf"\lambda_w = {lam_w:.3f} \;{'\\leq' if web_ok else '>'}\; \lambda_{{rw}} = {lam_rw:.3f}"
+                rf"\;\Rightarrow\; \textbf{{{'Non-Slender' if web_ok else 'Slender'}}}",
                 status="PASS" if web_ok else "WARN",
                 note="AISC 360-16 Table B4.1a Case 5: แผ่นเอวรับแรงอัดแบบ Stiffened",
             )
