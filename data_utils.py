@@ -81,7 +81,7 @@ def load_data(filepath=DEFAULT_FILENAME):
             elif 'weight' in c: rename_map[col] = 'Weight'
             elif 'ix' in c: rename_map[col] = 'Ix'
             elif 'zx' in c: rename_map[col] = 'Zx'
-            elif 'area' in c: rename_map[col] = 'Area'
+            elif c == 'a' or 'area' in c: rename_map[col] = 'Area'
             elif c == 'h': rename_map[col] = 'h'
             elif c == 't': rename_map[col] = 't'
             
