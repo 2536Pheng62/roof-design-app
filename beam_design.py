@@ -83,14 +83,14 @@ class ColdFormedBeamDesign(CalculationLogMixin):
                 "คำนวณพื้นที่เฉือนแทน",
                 r"A_w \approx 0.85A",
                 f"0.85 \\times {area:.3f}",
-                f"= {Aw:.3f}\\,\\text{{cm}^2}"
+                f"= {Aw:.3f}\\,\\text{{cm}}^2"
             )
         else:
             self.add_step(
                 "พื้นที่เฉือนจากตาราง",
                 r"A_w = A_{tab}",
                 "--",
-                f"= {Aw:.3f}\\,\\text{{cm}^2}"
+                f"= {Aw:.3f}\\,\\text{{cm}}^2"
             )
 
         phi_m = 0.90  # ϕ = 0.90 สำหรับ bending (ตาม มอก. 1228-2549)

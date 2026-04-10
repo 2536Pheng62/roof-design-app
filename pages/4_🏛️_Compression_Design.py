@@ -203,9 +203,9 @@ with col_out:
             col.markdown(
                 f"""<div style="text-align:center;">
                     <div style="font-size:2.8rem;">{emoji}</div>
-                    <div style="font-size:0.85rem;color:#b0b0b0;">{label}</div>
+                    <div style="font-size:0.85rem;color:var(--text-muted,#737373);">{label}</div>
                     <div style="font-size:1.9rem;font-weight:700;" class="{css_cls}">{value}</div>
-                    <div style="font-size:0.75rem;color:#888;">{sub}</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted,#737373);">{sub}</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -249,10 +249,10 @@ with col_out:
 
         def _res_style(val):
             v = str(val)
-            if "ผ่าน" in v or "OK" in v:
-                return "color:#00ff41;text-shadow:0 0 6px rgba(0,255,65,.5);font-weight:700;"
+            if ("ผ่าน" in v or "OK" in v) and "ไม่" not in v:
+                return "color:#22c55e;font-weight:700;"
             if "ไม่ผ่าน" in v or "เกิน" in v or "FAIL" in v:
-                return "color:#ff0040;text-shadow:0 0 6px rgba(255,0,64,.5);font-weight:700;"
+                return "color:#ef4444;font-weight:700;"
             return ""
 
         summary = pd.DataFrame({

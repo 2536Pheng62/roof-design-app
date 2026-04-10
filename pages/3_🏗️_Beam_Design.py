@@ -122,7 +122,7 @@ if should_calculate_beam:
 	m1.markdown(f"""
 	<div style="text-align: center;">
 		<div style="font-size: 3rem;">{moment_emoji_b}</div>
-		<div style="font-size: 0.9rem; color: #b0b0b0;">กำลังดัด</div>
+		<div style="font-size: 0.9rem; color: var(--text-muted, #737373);">กำลังดัด</div>
 		<div style="font-size: 2rem; font-weight: 700;" class="{moment_class_b}">{ratios['Moment']:.2f}</div>
 	</div>
 	""", unsafe_allow_html=True)
@@ -133,7 +133,7 @@ if should_calculate_beam:
 	m2.markdown(f"""
 	<div style="text-align: center;">
 		<div style="font-size: 3rem;">{shear_emoji_b}</div>
-		<div style="font-size: 0.9rem; color: #b0b0b0;">กำลังเฉือน</div>
+		<div style="font-size: 0.9rem; color: var(--text-muted, #737373);">กำลังเฉือน</div>
 		<div style="font-size: 2rem; font-weight: 700;" class="{shear_class_b}">{ratios['Shear']:.2f}</div>
 	</div>
 	""", unsafe_allow_html=True)
@@ -144,7 +144,7 @@ if should_calculate_beam:
 	m3.markdown(f"""
 	<div style="text-align: center;">
 		<div style="font-size: 3rem;">{defl_emoji_b}</div>
-		<div style="font-size: 0.9rem; color: #b0b0b0;">การโก่งตัว</div>
+		<div style="font-size: 0.9rem; color: var(--text-muted, #737373);">การโก่งตัว</div>
 		<div style="font-size: 2rem; font-weight: 700;" class="{defl_class_b}">{ratios['Deflection']:.2f}</div>
 	</div>
 	""", unsafe_allow_html=True)
@@ -167,8 +167,8 @@ if should_calculate_beam:
 	st.subheader("เปรียบเทียบค่ากำลัง")
 	summary_df = pd.DataFrame({
 		"การตรวจสอบ": ["โมเมนต์", "แรงเฉือน", "การโก่งตัว"],
-		"ค่าที่ต้องรับ": [f"{demands['Mu']:.2f} กก.-ม.", f"{demands['Vu']:.2f} กก.", f"{demands['Delta']:.3f} ซม."],
-		"ค่ากำลัง/เกณฑ์": [f"{capacity['Phi_Mn']:.2f} กก.-ม.", f"{capacity['Phi_Vn']:.2f} กก.", f"{capacity['Delta_Limit']:.3f} ซม."],
+		"ค่าที่ต้องรับ": [f"{demands['Mu']:.2f} กก.-ม.", f"{demands['Vu']:.2f} กก.", f"{demands['Delta_Total']:.3f} ซม."],
+		"ค่ากำลัง/เกณฑ์": [f"{capacity['Phi_Mn']:.2f} กก.-ม.", f"{capacity['Phi_Vn']:.2f} กก.", f"{capacity['Delta_Limit_Total']:.3f} ซม."],
 		"อัตราส่วน": [ratios['Moment'], ratios['Shear'], ratios['Deflection']],
 		"ผล": ["ผ่าน" if status['Moment'] else "ไม่ผ่าน",
 			   "ผ่าน" if status['Shear'] else "ไม่ผ่าน",
@@ -179,9 +179,9 @@ if should_calculate_beam:
 	st.subheader("บันทึกการคำนวณ")
 	with st.expander("รายละเอียดขั้นตอน", expanded=True):
 		for step in result["Steps"]:
-			st.markdown(f"**{step['title']}**")
+			icon = "✅" if step.get("status") == "PASS" else ("❌" if step.get("status") == "FAIL" else "ℹ️")
+			st.markdown(f"**{icon} {step['title']}**")
 			st.latex(step['latex'])
-			if step['subst'] != "--":
-				st.markdown(f"$$ {step['subst']} $$")
-			st.markdown(f"**= {step['result']}**")
+			if step.get('note'):
+				st.markdown(f"_{step['note']}_")
 			st.markdown("---")

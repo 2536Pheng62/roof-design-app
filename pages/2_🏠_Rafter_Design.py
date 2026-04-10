@@ -308,7 +308,7 @@ if should_calc:
         col.markdown(
             f'<div style="text-align:center;">'
             f'<div style="font-size:2.8rem;">{em}</div>'
-            f'<div style="font-size:0.85rem;color:#b0b0b0;">{label}</div>'
+            f'<div style="font-size:0.85rem;color:var(--text-muted,#737373);">{label}</div>'
             f'<div style="font-size:1.9rem;font-weight:700;" class="{cls}">{r:.2f}</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -324,8 +324,8 @@ if should_calc:
 
     def _rs(val):
         v = str(val)
-        if "ผ่าน" in v:  return "color:#00ff41;font-weight:700;"
-        if "ไม่ผ่าน" in v: return "color:#ff0040;font-weight:700;"
+        if "ผ่าน" in v and "ไม่" not in v: return "color:#22c55e;font-weight:700;"
+        if "ไม่ผ่าน" in v: return "color:#ef4444;font-weight:700;"
         return ""
 
     summary = pd.DataFrame({

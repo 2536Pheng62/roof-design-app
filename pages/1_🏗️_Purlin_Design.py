@@ -119,7 +119,7 @@ with col_in2:
         m1.markdown(f"""
         <div style="text-align: center;">
             <div style="font-size: 3rem;">{moment_emoji}</div>
-            <div style="font-size: 0.9rem; color: #b0b0b0;">กำลังดัด</div>
+            <div style="font-size: 0.9rem; color: var(--text-muted, #737373);">กำลังดัด</div>
             <div style="font-size: 2rem; font-weight: 700;" class="{moment_class}">{ratios['Moment']:.2f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -130,7 +130,7 @@ with col_in2:
         m2.markdown(f"""
         <div style="text-align: center;">
             <div style="font-size: 3rem;">{shear_emoji}</div>
-            <div style="font-size: 0.9rem; color: #b0b0b0;">กำลังเฉือน</div>
+            <div style="font-size: 0.9rem; color: var(--text-muted, #737373);">กำลังเฉือน</div>
             <div style="font-size: 2rem; font-weight: 700;" class="{shear_class}">{ratios['Shear']:.2f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -141,7 +141,7 @@ with col_in2:
         m3.markdown(f"""
         <div style="text-align: center;">
             <div style="font-size: 3rem;">{defl_emoji}</div>
-            <div style="font-size: 0.9rem; color: #b0b0b0;">การโก่งตัว</div>
+            <div style="font-size: 0.9rem; color: var(--text-muted, #737373);">การโก่งตัว</div>
             <div style="font-size: 2rem; font-weight: 700;" class="{defl_class}">{ratios['Deflection']:.2f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -178,12 +178,11 @@ with col_in2:
             ],
         })
         
-        # Apply styling to dataframe with neon colors
         def style_result(val):
-            if "ผ่าน" in str(val):
-                return 'color: #00ff41; text-shadow: 0 0 6px rgba(0, 255, 65, 0.5); font-weight: 700;'
+            if "ผ่าน" in str(val) and "ไม่" not in str(val):
+                return 'color: #22c55e; font-weight: 700;'
             elif "ไม่ผ่าน" in str(val):
-                return 'color: #ff0040; text-shadow: 0 0 6px rgba(255, 0, 64, 0.5); font-weight: 700;'
+                return 'color: #ef4444; font-weight: 700;'
             return ''
         
         styled_df = summary_df.style.format({"อัตราส่วน": "{:.2f}"}).map(style_result, subset=['ผล'])
